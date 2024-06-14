@@ -7,7 +7,7 @@ import ReactFlow, {
   useReactFlow,
 } from "reactflow"
 
-import { useAppActions, useFlowStore } from "../../singletons/store"
+import { useAppActions, useFlowStore, useAppStore, useTemporalStore} from "../../singletons/store"
 
 import "reactflow/dist/base.css"
 
@@ -18,6 +18,7 @@ import { NativeTypes } from "react-dnd-html5-backend"
 import { EipId } from "../../api/id"
 import { DragTypes } from "../draggable-panel/dragTypes"
 import EipNode from "./EipNode"
+import { red } from "@carbon/colors"
 
 const FLOW_ERROR_MESSAGE =
   "Failed to load the canvas - the stored flow is malformed. Clearing the flow from the state store."
@@ -61,6 +62,12 @@ const nodeTypes = {
 }
 
 const FlowCanvas = () => {
+
+  const { undo, redo } = useTemporalStore(
+    (state) => state,
+  )
+
+
   const reactFlowInstance = useReactFlow()
   const flowStore = useFlowStore()
   const {
@@ -122,6 +129,12 @@ const FlowCanvas = () => {
         >
           <Controls>
             <ControlButton title="clear" onClick={clearFlow}>
+              <TrashCan />
+            </ControlButton>
+            <ControlButton title="undo" onClick={() => undo(1)}>
+              <TrashCan />
+            </ControlButton>
+            <ControlButton title="redo" onClick={() => redo(1)}>
               <TrashCan />
             </ControlButton>
           </Controls>
