@@ -31,7 +31,8 @@ const getTabPanels = ({
         {attributesForm}
       </TabPanel>
     )
-  hasChildren && tabPanels.push(<TabPanel key="children">{childrenForm}</TabPanel>)
+  hasChildren &&
+    tabPanels.push(<TabPanel key="children">{childrenForm}</TabPanel>)
   return tabPanels
 }
 

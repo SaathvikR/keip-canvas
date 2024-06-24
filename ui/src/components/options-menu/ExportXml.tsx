@@ -5,13 +5,7 @@ import { forwardRef } from "react"
 // Placeholder for planned export to Spring Integration XML feature.
 const ExportXml = forwardRef<HTMLElement>(
   (props: OverflowMenuItemProps, ref) => {
-    return (
-      <OverflowMenuItem
-        {...props}
-        ref={ref}
-        itemText="Export XML"
-      />
-    )
+    return <OverflowMenuItem {...props} ref={ref} itemText="Export XML" />
   }
 )
 

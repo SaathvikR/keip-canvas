@@ -8,6 +8,9 @@ module.exports = {
     'plugin:react/recommended',
     'plugin:react/jsx-runtime',
     'plugin:react-hooks/recommended',
+    // Disables conflicting formatting rules between ESLint and Prettier.
+    // Since it's meant to override other rules, should always be last.
+    'eslint-config-prettier',
   ],
   ignorePatterns: ['dist', '.eslintrc.cjs'],
   parser: '@typescript-eslint/parser',

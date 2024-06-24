@@ -1,0 +1,5 @@
+node-modules
+dist
+
+// Ignore generated JSON files
+src/json/

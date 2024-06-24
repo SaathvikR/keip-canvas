@@ -2,7 +2,8 @@
 @use "@carbon/layout";
 @use "@carbon/colors";
 
-$icon-button-focus-shadow: inset 0 0 0 1px themes.$focus,
+$icon-button-focus-shadow:
+  inset 0 0 0 1px themes.$focus,
   inset 0 0 0 2px themes.$focus-inset;
 
 .eip-node {

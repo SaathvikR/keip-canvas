@@ -9,7 +9,12 @@ import { useAppActions, useGetSelectedChildNode } from "../../singletons/store"
 import ChildNodeConfig from "./ChildNodeConfig"
 import RootNodeConfig from "./RootNodeConfig"
 
-const flowControlledAttributes = new Set(["id", "channel", "input-channel", "output-channel"])
+const flowControlledAttributes = new Set([
+  "id",
+  "channel",
+  "input-channel",
+  "output-channel",
+])
 
 const getConfigurableAttributes = (attrs: Attribute[] | undefined) => {
   return attrs

@@ -206,8 +206,12 @@ const AttributeInput = (props: AttributeInputFactoryProps) => {
 }
 
 const AttributeConfigForm = (props: AttributeFormProps) => {
-  const required = props.attrs.filter((attr) => attr.required).sort((a, b) => a.name.localeCompare(b.name))
-  const optional = props.attrs.filter((attr) => !attr.required).sort((a, b) => a.name.localeCompare(b.name))
+  const required = props.attrs
+    .filter((attr) => attr.required)
+    .sort((a, b) => a.name.localeCompare(b.name))
+  const optional = props.attrs
+    .filter((attr) => !attr.required)
+    .sort((a, b) => a.name.localeCompare(b.name))
 
   const addPadding = "side-panel-padded-container"
 
