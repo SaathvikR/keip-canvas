@@ -7,11 +7,16 @@ import ReactFlow, {
   useReactFlow,
 } from "reactflow"
 
-import { useAppActions, useFlowStore, useAppStore, useTemporalStore} from "../../singletons/store"
+import {
+  useAppActions,
+  useFlowStore,
+  useAppStore,
+  useTemporalStore,
+} from "../../singletons/store"
 
 import "reactflow/dist/base.css"
 
-import { TrashCan } from "@carbon/icons-react"
+import { TrashCan, Undo, Redo } from "@carbon/icons-react"
 import { ErrorBoundary } from "@carbon/react"
 import { DropTargetMonitor, useDrop } from "react-dnd"
 import { NativeTypes } from "react-dnd-html5-backend"
@@ -62,11 +67,11 @@ const nodeTypes = {
 }
 
 const FlowCanvas = () => {
+  const store = useAppStore()
 
-  const { undo, redo } = useTemporalStore(
-    (state) => state,
+  const { undo, redo, futureStates, pastStates, clear } = useTemporalStore(
+    (state) => state
   )
-
 
   const reactFlowInstance = useReactFlow()
   const flowStore = useFlowStore()
@@ -112,6 +117,14 @@ const FlowCanvas = () => {
 
   return (
     <div className="canvas" ref={drop}>
+      <p>
+        <small>past states: {JSON.stringify(pastStates)}</small>
+      </p>
+      <p>
+        <small>future states: {JSON.stringify(futureStates)}</small>
+      </p>
+      <br />
+      current state: {JSON.stringify(store)}
       <ErrorBoundary
         fallback={
           <ErrorHandler message={FLOW_ERROR_MESSAGE} callback={clearFlow} />
@@ -127,14 +140,17 @@ const FlowCanvas = () => {
           onPaneClick={() => clearSelectedChildNode()}
           fitView
         >
-          <Controls>
+          <Controls position="top-left">
             <ControlButton title="clear" onClick={clearFlow}>
               <TrashCan />
             </ControlButton>
-            <ControlButton title="undo" onClick={() => undo(1)}>
-              <TrashCan />
+            <ControlButton title="undo" onClick={() => undo()}>
+              <Undo />
             </ControlButton>
-            <ControlButton title="redo" onClick={() => redo(1)}>
+            <ControlButton title="redo" onClick={() => redo()}>
+              <Redo />
+            </ControlButton>
+            <ControlButton title="clear" onClick={() => clear()}>
               <TrashCan />
             </ControlButton>
           </Controls>

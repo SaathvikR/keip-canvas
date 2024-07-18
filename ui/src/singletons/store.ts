@@ -1,6 +1,10 @@
-import { create, useStore} from "zustand"
-import {temporal, TemporalState} from "zundo"
+import { create, useStore } from "zustand"
+import { temporal, TemporalState } from "zundo"
+import { useStoreWithEqualityFn } from "zustand/traditional"
+import shallow from "zustand/shallow"
 import { createJSONStorage, persist } from "zustand/middleware"
+import { throttle } from "throttle-debounce"
+import isDeepEqual from "fast-deep-equal"
 
 import { nanoid } from "nanoid/non-secure"
 import {
@@ -21,6 +25,8 @@ import { useShallow } from "zustand/react/shallow"
 import { AttributeTypes } from "../api/eipSchema"
 import { EIP_NODE_KEY, EipFlowNode } from "../api/flow"
 import { ChildNodeId, EipId, areChildIdsEqual } from "../api/id"
+import { getNodesBounds } from 'reactflow';
+import { getDimensions } from "../components/canvas/EipNode"
 
 export const ROOT_PARENT = "root"
 
@@ -67,11 +73,6 @@ interface AppActions {
   importFlowFromJson: (json: string) => void
 }
 
-
-interface sample {
-  nodes: EipFlowNode[]
-}
-
 interface AppStore {
   nodes: EipFlowNode[]
   edges: Edge[]
@@ -82,147 +83,200 @@ interface AppStore {
   appActions: AppActions
 }
 
+type PartializedStoreState = Pick<AppStore, "nodes" | "edges" >
+
 // If app becomes too slow, might need to switch to async persistent storage.
 export const useAppStore = create<AppStore>()(
-  temporal<AppStore>(
-    (set) => ({
-      nodes: [],
-      edges: [],
-      eipNodeConfigs: {},
-      selectedChildNode: null,
+  persist(
+    temporal(
+      (set) => ({
+        nodes: [],
+        edges: [],
+        eipNodeConfigs: {},
+        selectedChildNode: null,
 
-      reactFlowActions: {
-        onNodesChange: (changes: NodeChange[]) =>
-          set((state) => {
-            const updates: Partial<AppStore> = {
-              nodes: applyNodeChanges(changes, state.nodes),
-            }
-
-            const updatedEipConfigs = removeDeletedNodeConfigs(state, changes)
-            if (updatedEipConfigs) {
-              updates.eipNodeConfigs = updatedEipConfigs
-            }
-
-            return updates
-          }),
-
-        onEdgesChange: (changes: EdgeChange[]) =>
-          set((state) => ({
-            edges: applyEdgeChanges(changes, state.edges),
-          })),
-
-        onConnect: (connection: Connection) =>
-          set((state) => ({
-            edges: addEdge(connection, state.edges),
-          })),
-      },
-
-      appActions: {
-        createDroppedNode: (eipId, position) =>
-          set((state) => {
-            const node = newNode(eipId, position)
-            return {
-              nodes: [...state.nodes, node],
-              eipNodeConfigs: {
-                ...state.eipNodeConfigs,
-                [node.id]: { attributes: {}, children: {} },
-              },
-            }
-          }),
-
-        updateNodeLabel: (id, label) =>
-          set((state) => ({
-            nodes: state.nodes.map((node) =>
-              node.id === id ? { ...node, data: { ...node.data, label } } : node
-            ),
-          })),
-
-        updateNodeDescription: (id, description) =>
-          set((state) => {
-            const configs = { ...state.eipNodeConfigs }
-            configs[id].description = description
-            return { eipNodeConfigs: configs }
-          }),
-
-        updateEipAttribute: (id, parentId, attrName, value) =>
-          set((state) => {
-            const configs = { ...state.eipNodeConfigs }
-            if (parentId === ROOT_PARENT) {
-              configs[id].attributes[attrName] = value
-            } else {
-              configs[parentId].children[id][attrName] = value
-            }
-            return { eipNodeConfigs: configs }
-          }),
-
-        updateEnabledChildren: (nodeId, children) =>
-          set((state) => {
-            const configs = { ...state.eipNodeConfigs }
-            configs[nodeId].children = children.reduce(
-              (accum, child) => {
-                accum[child] = {}
-                return accum
-              },
-              {} as Record<string, AttributeMapping>
-            )
-
-            return { eipNodeConfigs: configs }
-          }),
-
-        updateSelectedChildNode: (childId) =>
-          set(() => ({ selectedChildNode: childId })),
-
-        clearSelectedChildNode: () => set(() => ({ selectedChildNode: null })),
-
-        clearFlow: () =>
-          set(() => ({
-            nodes: [],
-            edges: [],
-            eipNodeConfigs: {},
-            selectedChildNode: null,
-          })),
-
-        clearDiagramSelections: () =>
-          set((state) => ({
-            nodes: state.nodes.map((node) => ({ ...node, selected: false })),
-            edges: state.edges.map((edge) => ({ ...edge, selected: false })),
-          })),
-
-        importFlowFromJson: (json: string) =>
-          set(() => {
-            const imported = JSON.parse(json) as Partial<AppStore>
-            if (isStoreType(imported)) {
-              return {
-                nodes: imported.nodes,
-                edges: imported.edges,
-                eipNodeConfigs: imported.eipNodeConfigs,
+        reactFlowActions: {
+          onNodesChange: (changes: NodeChange[]) =>
+            set((state) => {
+              const updates: Partial<AppStore> = {
+                nodes: applyNodeChanges(changes, state.nodes),
               }
-            }
-            console.error("Failed to import an EIP flow JSON. Malformed input")
-            return {}
+
+              const updatedEipConfigs = removeDeletedNodeConfigs(state, changes)
+              if (updatedEipConfigs) {
+                updates.eipNodeConfigs = updatedEipConfigs
+              }
+
+              return updates
+            }),
+
+          onEdgesChange: (changes: EdgeChange[]) =>
+            set((state) => ({
+              edges: applyEdgeChanges(changes, state.edges),
+            })),
+
+          onConnect: (connection: Connection) =>
+            set((state) => ({
+              edges: addEdge(connection, state.edges),
+            })),
+        },
+
+        appActions: {
+          createDroppedNode: (eipId, position) =>
+            set((state) => {
+              const node = newNode(eipId, position)
+              return {
+                nodes: [...state.nodes, node],
+                eipNodeConfigs: {
+                  ...state.eipNodeConfigs,
+                  [node.id]: { attributes: {}, children: {} },
+                },
+              }
+            }),
+
+          updateNodeLabel: (id, label) =>
+            set((state) => ({
+              nodes: state.nodes.map((node) =>
+                node.id === id
+                  ? { ...node, data: { ...node.data, label } }
+                  : node
+              ),
+            })),
+
+          updateNodeDescription: (id, description) =>
+            set((state) => {
+              const configs = { ...state.eipNodeConfigs }
+              configs[id].description = description
+              return { eipNodeConfigs: configs }
+            }),
+
+          updateEipAttribute: (id, parentId, attrName, value) =>
+            set((state) => {
+              const configs = { ...state.eipNodeConfigs }
+              if (parentId === ROOT_PARENT) {
+                configs[id].attributes[attrName] = value
+              } else {
+                configs[parentId].children[id][attrName] = value
+              }
+              return { eipNodeConfigs: configs }
+            }),
+
+          updateEnabledChildren: (nodeId, children) =>
+            set((state) => {
+              const configs = { ...state.eipNodeConfigs }
+              configs[nodeId].children = children.reduce(
+                (accum, child) => {
+                  accum[child] = {}
+                  return accum
+                },
+                {} as Record<string, AttributeMapping>
+              )
+
+              return { eipNodeConfigs: configs }
+            }),
+
+          updateSelectedChildNode: (childId) =>
+            set(() => ({ selectedChildNode: childId })),
+
+          clearSelectedChildNode: () =>
+            set(() => ({ selectedChildNode: null })),
+
+          clearFlow: () =>
+            set(() => ({
+              nodes: [],
+              edges: [],
+              eipNodeConfigs: {},
+              selectedChildNode: null,
+            })),
+
+          clearDiagramSelections: () =>
+            set((state) => ({
+              nodes: state.nodes.map((node) => ({ ...node, selected: false })),
+              edges: state.edges.map((edge) => ({ ...edge, selected: false })),
+            })),
+
+          importFlowFromJson: (json: string) =>
+            set(() => {
+              const imported = JSON.parse(json) as Partial<AppStore>
+              if (isStoreType(imported)) {
+                return {
+                  nodes: imported.nodes,
+                  edges: imported.edges,
+                  eipNodeConfigs: imported.eipNodeConfigs,
+                }
+              }
+              console.error(
+                "Failed to import an EIP flow JSON. Malformed input"
+              )
+              return {}
+            }),
+        },
+      }),
+      {
+        limit: 50,
+
+        // pastStates: [{ nodes:  }, {edges: [] }],
+        // futureStates: [{ field1: 'value3' }, { field1: 'value4' }],
+
+        // pastStates: [{"edges":[],"nodes":[]}],
+        // futureStates: [{"edges":[],"nodes":[]}],
+
+        handleSet: (handleSet) =>
+          throttle<typeof handleSet>(5000, (state) => {
+            console.info("handleSet called")
+            handleSet(state)
           }),
-      },
-    }),
-    // {
-      // name: "eipFlow",
-      // version: 0,
-      // storage: createJSONStorage(() => localStorage),
-      // partialize: (state) =>
-      //   Object.fromEntries(
-      //     Object.entries(state).filter(([key]) => !NO_PERSIST.has(key))
-      //   ),
-    // }
+
+        //comment 
+        partialize: (state) => {
+          const newNodes = state.nodes.map((node) => {
+            const n = {...node}
+            delete n.width
+            delete n.height
+            delete n.selected
+            delete n.draggable
+            delete n.dragging
+            delete n.positionAbsolute
+            return n
+          })
+          const { edges } = state
+          return { edges, nodes: newNodes }
+        },
+
+        // equality: (pastState, currentState) => shallow(pastState, currentState),
+
+        // equality: (pastState, currentState) =>
+        //   pastState.nodes !== currentState.nodes &&
+        //   pastState.edges !== currentState.edges,
+
+        equality: (pastState, currentState) =>
+          isDeepEqual(pastState, currentState),
+      }
+    ),
+    {
+      name: "eipFlow",
+      version: 0,
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) =>
+        Object.fromEntries(
+          Object.entries(state).filter(([key]) => !NO_PERSIST.has(key))
+        ),
+    }
   )
-  
 )
 
-export const useTemporalStore = <T extends unknown>(
-  selector: (state: TemporalState<AppStore>) => T,
-) => useStore(useAppStore.temporal, selector)
-
+export const useTemporalStore = <T>(
+  selector: (state: TemporalState<PartializedStoreState>) => T,
+  equality?: (a: T, b: T) => boolean
+) => useStoreWithEqualityFn(useAppStore.temporal, selector, equality)
+ 
 const newNode = (eipId: EipId, position: XYPosition) => {
+  // const DEFAULT_NODE_WIDTH = 128
+  // const DEFAULT_NODE_HEIGHT = 128
+  // const getHeight = (node: EipFlowNode) => node.height ?? DEFAULT_NODE_HEIGHT
+  // const getWidth = (node: EipFlowNode) => node.width ?? DEFAULT_NODE_WIDTH
   const id = nanoid(10)
-  const node: EipFlowNode = {
+  let node: EipFlowNode = {
     id: id,
     type: EIP_NODE_KEY,
     position: position,
@@ -231,6 +285,12 @@ const newNode = (eipId: EipId, position: XYPosition) => {
       label: "New Node",
     },
   }
+
+  // node.height = getHeight(node) 
+  // node.width = getWidth(node)
+
+  // node = getDimensions(eipId, node)
+
   return node
 }
 
